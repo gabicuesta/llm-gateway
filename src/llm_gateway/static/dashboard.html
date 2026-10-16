@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Gateway · Usage</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f4f2; --surface: #fcfcfb; --line: #e3e2de; --grid: #ecebe7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+    --series-1: #2a78d6; --series-1-track: #d9e7f8;
+    --warning: #b07800; --warning-fill: #eda100; --critical: #c23534; --critical-fill: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #121211; --surface: #1a1a19; --line: #2e2d2b; --grid: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+      --series-1: #3987e5; --series-1-track: #1f3550;
+      --warning: #f0b43c; --warning-fill: #c98500; --critical: #ff8a89; --critical-fill: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text-primary);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 16px 56px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  .sub { color: var(--text-secondary); font-size: 13px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  input, button { font: inherit; color: var(--text-primary); background: var(--surface); border: 1px solid var(--line);
+                  border-radius: 8px; padding: 7px 10px; }
+  button { cursor: pointer; font-weight: 600; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 520px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile .label { color: var(--text-secondary); font-size: 12.5px; }
+  .tile .value { font-size: 24px; font-weight: 600; margin-top: 2px; }
+  .tile.hero .value { font-size: 32px; }
+  h2 { font-size: 14px; margin: 0 0 10px; }
+  .grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .grid2 > *, main > * { min-width: 0; }
+  .chart { position: relative; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .axis text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .axis line { stroke: var(--grid); }
+  .bar { fill: var(--series-1); }
+  .bar:hover, .bar.active { opacity: .8; }
+  .tip { position: absolute; pointer-events: none; background: var(--text-primary); color: var(--surface); font-size: 12px;
+         padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); display: none; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+  td:first-child { white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .meter { height: 8px; border-radius: 99px; background: var(--series-1-track); overflow: hidden; min-width: 90px; }
+  .meter span { display: block; height: 100%; background: var(--series-1); border-radius: 99px; }
+  .meter.warning span { background: var(--warning-fill); }
+  .meter.critical span { background: var(--critical-fill); }
+  .state { font-size: 12px; }
+  .state.warning { color: var(--warning); } .state.critical { color: var(--critical); }
+  .empty, .error { color: var(--text-secondary); padding: 32px; text-align: center; }
+  .error { color: var(--critical); }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: 12.5px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>LLM Gateway</h1>
+      <div class="sub" id="period">Usage and spend by team</div>
+    </div>
+    <form class="controls" id="auth">
+      <input type="month" id="month" aria-label="Month">
+      <input type="password" id="key" placeholder="Admin key" aria-label="Admin key" autocomplete="off">
+      <button>Load</button>
+    </form>
+  </header>
+  <div id="content"><div class="card empty">Enter the admin key to load usage.</div></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const usd = n => n >= 100 ? `$${n.toLocaleString("en-US", {maximumFractionDigits: 0})}` : `$${n.toFixed(n < 1 ? 4 : 2)}`;
+const compact = n => Intl.NumberFormat("en-US", {notation: "compact", maximumFractionDigits: 1}).format(n);
+
+try { $("#key").value = sessionStorage.getItem("gw-admin") || ""; } catch {}
+$("#month").value = new Date().toISOString().slice(0, 7);
+$("#auth").addEventListener("submit", e => { e.preventDefault(); load(); });
+if ($("#key").value) load();
+
+async function load() {
+  const key = $("#key").value.trim();
+  try { sessionStorage.setItem("gw-admin", key); } catch {}
+  $("#content").innerHTML = `<div class="card empty">Loading…</div>`;
+  try {
+    const r = await fetch(`/admin/usage?month=${encodeURIComponent($("#month").value)}`, {headers: {Authorization: `Bearer ${key}`}});
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error?.message || r.statusText);
+    render(body);
+  } catch (err) {
+    $("#content").innerHTML = `<div class="card error">${esc(err.message)}</div>`;
+  }
+}
+
+function render(d) {
+  $("#period").textContent = `Usage and spend by team · ${d.month}`;
+  const sum = k => d.teams.reduce((a, t) => a + (t[k] || 0), 0);
+  const requests = sum("requests");
+  const tiles = [
+    ["Spend this month", usd(sum("cost_usd")), true],
+    ["Requests", compact(requests)],
+    ["Cache hit rate", requests ? `${Math.round(sum("cache_hits") / requests * 100)}%` : "–"],
+    ["Requests with fallback", compact(sum("fallbacks"))],
+    ["PII values redacted", compact(sum("pii_redactions"))],
+    ["Open circuits", Object.keys(d.open_circuits || {}).length],
+  ];
+  const teamRows = d.teams.map(t => {
+    const b = t.monthly_budget_usd, pct = b ? t.cost_usd / b : null;
+    const level = pct == null ? "" : pct >= 1 ? "critical" : pct >= .8 ? "warning" : "";
+    const label = pct == null ? "No budget" : pct >= 1 ? "Over budget" : pct >= .8 ? "Near limit" : `${Math.round(pct * 100)}%`;
+    return `<tr>
+      <td>${esc(t.team)}</td>
+      <td class="num">${compact(t.requests)}</td>
+      <td class="num">${usd(t.cost_usd)}${b ? ` / ${usd(b)}` : ""}</td>
+      <td>${pct == null ? "" : `<div class="meter ${level}" role="meter" aria-valuenow="${Math.round(pct*100)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(pct, 1) * 100}%"></span></div>`}
+          <span class="state ${level}">${level === "critical" ? "⛔ " : level === "warning" ? "⚠ " : ""}${label}</span></td>
+      <td class="num">${t.errors}</td>
+    </tr>`;
+  }).join("");
+  const targetRows = d.targets.map(t => `<tr>
+      <td>${esc(t.target)}${d.open_circuits?.[t.target] ? ` <span class="state critical">⛔ circuit open</span>` : ""}</td>
+      <td class="num">${compact(t.requests)}</td><td class="num">${usd(t.cost_usd)}</td>
+      <td class="num">${t.avg_latency_ms} ms</td><td class="num">${t.errors}</td></tr>`).join("");
+
+  $("#content").innerHTML = `
+    <div class="tiles">${tiles.map(([l, v, hero]) => `<div class="card tile${hero ? " hero" : ""}"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("")}</div>
+    <div class="card">
+      <h2>Daily spend (USD)</h2>
+      <div class="chart" id="chart"></div>
+      <details><summary>Show as table</summary><div class="table-wrap"><table><thead><tr><th>Day</th><th class="num">Spend</th><th class="num">Requests</th></tr></thead>
+        <tbody>${d.daily.map(x => `<tr><td>${x.day}</td><td class="num">${usd(x.cost_usd)}</td><td class="num">${x.requests}</td></tr>`).join("")}</tbody></table></div></details>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>Teams</h2><div class="table-wrap"><table>
+        <thead><tr><th>Team</th><th class="num">Requests</th><th class="num">Spend</th><th>Budget</th><th class="num">Errors</th></tr></thead>
+        <tbody>${teamRows || `<tr><td colspan="5" class="sub">No traffic yet.</td></tr>`}</tbody></table></div></div>
+      <div class="card"><h2>Upstream targets</h2><div class="table-wrap"><table>
+        <thead><tr><th>Target</th><th class="num">Requests</th><th class="num">Spend</th><th class="num">Avg latency</th><th class="num">Errors</th></tr></thead>
+        <tbody>${targetRows || `<tr><td colspan="5" class="sub">No traffic yet.</td></tr>`}</tbody></table></div></div>
+    </div>`;
+  drawBars(d.daily);
+  window.onresize = () => drawBars(d.daily);
+}
+
+function drawBars(days) {
+  const el = $("#chart");
+  if (!days.length) { el.innerHTML = `<div class="empty">No traffic this month.</div>`; return; }
+  const raw = Math.max(...days.map(d => d.cost_usd)) || 1;
+  const mag = 10 ** Math.floor(Math.log10(raw)), max = [1, 2, 2.5, 5, 10].map(f => f * mag).find(v => v >= raw);
+  const tickLabel = v => v === 0 ? "$0" : max < 1 ? `$${v.toFixed(2)}` : `$${v.toLocaleString("en-US", {maximumFractionDigits: 1})}`;
+  const W = Math.max(280, el.clientWidth), H = 220, L = 44, B = 24, T = 8;
+  const step = (W - L) / days.length, bw = Math.max(2, Math.min(28, step - 2));
+  const y = v => T + (H - T - B) * (1 - v / max);
+  const ticks = [0, .5, 1].map(f => max * f);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily spend bar chart"><g class="axis">`;
+  ticks.forEach(v => svg += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${tickLabel(v)}</text>`);
+  days.forEach((d, i) => { if (i % Math.ceil(days.length / Math.max(2, Math.floor(W / 90))) === 0)
+    svg += `<text x="${L + i * step + step / 2}" y="${H - 6}" text-anchor="middle">${d.day.slice(5)}</text>`; });
+  svg += `</g>`;
+  days.forEach((d, i) => {
+    const x = L + i * step + (step - bw) / 2, top = y(d.cost_usd), h = Math.max(1, H - B - top), r = Math.min(4, bw / 2, h);
+    // rounded data-end at the top, square at the baseline
+    svg += `<path class="bar" data-i="${i}" d="M${x},${H - B} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${H - B} Z"/>`;
+    svg += `<rect data-i="${i}" x="${L + i * step}" y="${T}" width="${step}" height="${H - T - B}" fill="transparent"/>`;
+  });
+  el.innerHTML = svg + `</svg><div class="tip"></div>`;
+  const tip = el.querySelector(".tip"), bars = el.querySelectorAll(".bar");
+  el.querySelectorAll("[data-i]").forEach(node => {
+    node.addEventListener("mouseenter", () => {
+      const i = +node.dataset.i, d = days[i], bar = bars[i], box = bar.getBoundingClientRect(), host = el.getBoundingClientRect();
+      bars.forEach(b => b.classList.toggle("active", b === bar));
+      tip.innerHTML = `<strong>${d.day}</strong> · ${usd(d.cost_usd)} · ${d.requests} req`;
+      tip.style.left = `${box.left - host.left + box.width / 2}px`;
+      tip.style.top = `${box.top - host.top}px`;
+      tip.style.display = "block";
+    });
+  });
+  el.addEventListener("mouseleave", () => { tip.style.display = "none"; bars.forEach(b => b.classList.remove("active")); });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+# LLM Gateway configuration. ${VAR} is replaced with the environment variable.
+
+providers:
+  anthropic: { type: anthropic, api_key_env: ANTHROPIC_API_KEY }
+  openai:    { type: openai,    api_key_env: OPENAI_API_KEY }
+  gemini:    { type: gemini,    api_key_env: GEMINI_API_KEY }
+  # Any OpenAI-compatible server works too, e.g. a local Ollama:
+  # local:   { type: openai, base_url: "http://localhost:11434/v1" }
+
+# Aliases are what clients ask for. Each maps to an ordered fallback chain.
+models:
+  smart: [anthropic:claude-opus-5-5, openai:gpt-6-astra]
+  balanced: [anthropic:claude-sonnet-5-5, openai:gpt-6.1-sol, gemini:gemini-3.8-flash]
+  fast: [openai:gpt-6-luna, anthropic:claude-haiku-5-5, gemini:gemini-3.5-flash-lite]
+
+# USD per million tokens. Used for cost tracking and budgets; check your vendor's current prices.
+pricing:
+  claude-opus-5-5:   { input: 4.0, output: 20.0 }
+  claude-sonnet-5-5: { input: 2.0, output: 10.0 }
+  claude-haiku-5-5:  { input: 0.10, output: 0.50 }
+  gpt-6-luna:        { input: 0.10, output: 0.50 }
+  # gpt-6-astra, gpt-6.1-sol, gemini-*: add their prices here
+
+# Create keys with:  llm-gateway key --team <name>
+teams:
+  - name: product
+    key_hashes: ["<sha256 from llm-gateway key>"]
+    monthly_budget_usd: 200
+    requests_per_minute: 120
+  - name: data
+    key_hashes: ["<sha256 from llm-gateway key>"]
+    monthly_budget_usd: 50
+    requests_per_minute: 30
+    allowed_models: [fast, balanced]
+
+admin_key_hash: "<sha256 from llm-gateway key --team admin>"
+
+pii:
+  enabled: true
+  mode: mask              # mask | block
+  restore_in_response: true
+  entities: [email, dni_nie, phone_es, iban, credit_card]
+
+cache:
+  enabled: true           # only temperature=0 requests, or header x-gateway-cache: on
+  ttl_s: 3600
+  max_entries: 2000
+
+database: gateway.db
+circuit_breaker_failures: 3
+circuit_breaker_cooldown_s: 30
